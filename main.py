@@ -18,9 +18,13 @@ def eval(model, criterion, valid_data, batch_size):
         _input = valid_data[i][0]
         _target = valid_data[i][1]
         # for batch
-        batch_input = _input.unsqueeze(0)
+        q_input = _input[0].unsqueeze(0)
+        s_input = _input[1].unsqueeze(0)
         for _ in range(batch_size - 1):
-            batch_input = torch.cat((batch_input, _input.unsqueeze(0)), dim=0)
+            q_input = torch.cat((q_input, _input[0].unsqueeze(0)), dim=0)
+            s_input = torch.cat((s_input, _input[1].unsqueeze(0)), dim=0)
+
+        batch_input = [q_input, s_input]
 
         hq0, cq0 = model.init_hidden()
         hq0, cq0 = hq0.to(device), cq0.to(device)
@@ -29,7 +33,7 @@ def eval(model, criterion, valid_data, batch_size):
         hs0, cs0 = hs0.to(device), cs0.to(device)
 
         # get last layer's output(using [-1]) and only one result(using [0]) from batch
-        output = model(batch_input, (hq0, cq0), (hs0, cs0))[-1][0]
+        output = model(batch_input, (hq0, cq0), (hs0, cs0))[0]
         loss = criterion(output.unsqueeze(0), _target.unsqueeze(0))
         total_loss += float(loss)
 
@@ -95,7 +99,8 @@ def train(config):
                     i + 1, len(train_data) // config.batch_size,
                     local_loss / 400))
                 local_loss = 0
-        """
+            break
+
         # eval
         valid_acc, valid_loss = eval(model, criterion, dev_data, config.batch_size)
         print("[%d/%d]: Loss %.3f, Accuracy: %.3f" % (epoch+1, config.epoch, valid_loss, valid_acc))
@@ -113,7 +118,6 @@ def train(config):
                 print(checkpoint)
                 torch.save(model.state_dict(), config.state_dict+str(epoch))
                 best_accuracy = valid_acc
-        """
 
 
 def test(config):
@@ -125,7 +129,7 @@ def test(config):
 
     total_num_correct = 0
 
-    model = Encoder(config.glove_dim, batch_size=config.batch_size).to(device)
+    model = SentenceEncoder(config.glove_dim, batch_size=config.batch_size).to(device)
     model.load_state_dict(torch.load(config.test_model))
 
     for i in tqdm(range(len(test_data))):
@@ -136,11 +140,14 @@ def test(config):
         for _ in range(config.batch_size - 1):
             batch_input = torch.cat((batch_input, _input.unsqueeze(0)), dim=0)
 
-        h0, c0 = model.init_hidden()
-        h0, c0 = h0.to(device), c0.to(device)
+        hq0, cq0 = model.init_hidden()
+        hq0, cq0 = hq0.to(device), cq0.to(device)
+
+        hs0, cs0 = model.init_hidden()
+        hs0, cs0 = hs0.to(device), cs0.to(device)
 
         # get last layer's output(using [-1]) and only one result(using [0]) from batch
-        output = model(batch_input, h0, c0)[-1][0]
+        output = model(batch_input, (hq0, cq0), (hs0, cs0))[0]
 
         _, i = torch.max(output, 0)
         if i.item() == _target.item():
