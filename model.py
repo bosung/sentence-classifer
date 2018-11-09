@@ -21,6 +21,7 @@ class SentenceEncoder(nn.Module):
         self.lstm_s = nn.LSTM(word_dim, self.s_hidden_size, num_layers=num_layers, batch_first=True)
         self.last = nn.Linear(self.q_hidden_size + self.s_hidden_size, 2)
         self.softmax = nn.LogSoftmax(dim=1)
+        self.sigmoid = nn.Sigmoid()
 
     def forward(self, _input, q_hidden, s_hidden):
         # _input = (question, sentence)
@@ -33,7 +34,20 @@ class SentenceEncoder(nn.Module):
         _, (hs, cn) = self.lstm_s(s_embedded, s_hidden)
         hq, hs = hq.squeeze(), hs.squeeze()
         out = self.last(torch.cat((hq, hs), dim=1))
-        return self.softmax(out)
+        # return self.softmax(out)  # Logsoftmax with NLLLoss
+        return self.sigmoid(out)  # sigmoid with BCELoss
+
+    def sent_embed(self, _input, q_hidden, s_hidden):
+        # _input = (question, sentence)
+        question = _input[0]
+        sentence = _input[1]
+        q_embedded = self.word_embedding(question)
+        s_embedded = self.word_embedding(sentence)
+
+        _, (hq, cn) = self.lstm_q(q_embedded, q_hidden)
+        _, (hs, cn) = self.lstm_s(s_embedded, s_hidden)
+        hq, hs = hq.squeeze(), hs.squeeze()
+        return hq, hs
 
     def init_hidden(self):
         return (torch.zeros(self.num_layers, self.batch_size, self.q_hidden_size),

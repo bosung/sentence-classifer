@@ -49,6 +49,7 @@ def parse_file(raw_file, word_counter):
                 for qa in qas:
                     q = qa["question"]
                     # answers = qa["answers"]  # list type of dict('text', 'answer_start')
+                    _id = qa["id"]
                     is_impossible = qa["is_impossible"]
                     if is_impossible:
                         answers = qa["plausible_answers"]
@@ -61,6 +62,7 @@ def parse_file(raw_file, word_counter):
 
                     for (idx, sent) in context_sents:
                         data.append({"question": q,
+                                     "id": _id,
                                      "answers": answers,
                                      "is_impossible": is_impossible,
                                      "context_sent": sent,
