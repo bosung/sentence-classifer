@@ -32,7 +32,7 @@ class SentenceEncoder(nn.Module):
 
         _, (hq, cn) = self.lstm_q(q_embedded, q_hidden)
         _, (hs, cn) = self.lstm_s(s_embedded, s_hidden)
-        hq, hs = hq.squeeze(), hs.squeeze()
+        hq, hs = hq[-1], hs[-1]
         out = self.last(torch.cat((hq, hs), dim=1))
         # return self.softmax(out)  # Logsoftmax with NLLLoss
         return self.sigmoid(out)  # sigmoid with BCELoss
@@ -49,6 +49,8 @@ class SentenceEncoder(nn.Module):
         hq, hs = hq.squeeze(), hs.squeeze()
         return hq, hs
 
-    def init_hidden(self):
-        return (torch.zeros(self.num_layers, self.batch_size, self.q_hidden_size),
-                torch.zeros(self.num_layers, self.batch_size, self.q_hidden_size))
+    def init_hidden(self, batch_size=None):
+        if batch_size is None:
+            batch_size = self.batch_size
+        return (torch.zeros(self.num_layers, batch_size, self.q_hidden_size),
+                torch.zeros(self.num_layers, batch_size, self.q_hidden_size))

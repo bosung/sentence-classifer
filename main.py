@@ -10,7 +10,7 @@ from model import SentenceEncoder
 from const import *
 
 
-def eval(model, criterion, valid_data, batch_size):
+def eval(model, criterion, valid_data):
     total_loss = 0
     total_num_correct = 0
     # gold sentence
@@ -29,27 +29,18 @@ def eval(model, criterion, valid_data, batch_size):
         else:
             total_ir_sent += 1
 
-        # for batch
-        q_input = _input[0].unsqueeze(0)
-        s_input = _input[1].unsqueeze(0)
-        for _ in range(batch_size - 1):
-            q_input = torch.cat((q_input, _input[0].unsqueeze(0)), dim=0)
-            s_input = torch.cat((s_input, _input[1].unsqueeze(0)), dim=0)
-
-        batch_input = [q_input, s_input]
-
-        hq0, cq0 = model.init_hidden()
+        hq0, cq0 = model.init_hidden(batch_size=1)
         hq0, cq0 = hq0.to(device), cq0.to(device)
 
-        hs0, cs0 = model.init_hidden()
+        hs0, cs0 = model.init_hidden(batch_size=1)
         hs0, cs0 = hs0.to(device), cs0.to(device)
 
-        # get last layer's output(using [-1]) and only one result(using [0]) from batch
-        output = model(batch_input, (hq0, cq0), (hs0, cs0))[0]
-        loss = criterion(output.unsqueeze(0), _target.unsqueeze(0))
+        _input = [_input[0].unsqueeze(0), _input[1].unsqueeze(0)]
+        output = model(_input, (hq0, cq0), (hs0, cs0))
+        loss = criterion(output, _target.unsqueeze(0))
         total_loss += float(loss)
 
-        _, i = torch.max(output, 0)
+        _, i = torch.max(output[0], 0)
         _, ti = torch.max(_target, 0)
         if i.item() == ti.item():
             total_num_correct += 1
@@ -72,13 +63,13 @@ def train(config):
         train_data = [[
             (torch.tensor(d["question_idx"], device=device),
              torch.tensor(d["sentence_idx"], device=device)),
-            torch.tensor([1., 0.], device=device) if d["label_idx"] == '0' else torch.tensor([0., 1.], device=device)] for d in raw_train_data]
+            torch.tensor([1., 0.], device=device) if d["label_idx"] == 0 else torch.tensor([0., 1.], device=device)] for d in raw_train_data]
     with open(config.dev_file, "r") as fh:
         raw_dev_data = json.load(fh)
         dev_data = [[
             (torch.tensor(d["question_idx"], device=device),
              torch.tensor(d["sentence_idx"], device=device)),
-            torch.tensor([1., 0.], device=device) if d["label_idx"] == '0' else torch.tensor([0., 1.], device=device)] for d in raw_dev_data]
+            torch.tensor([1., 0.], device=device) if d["label_idx"] == 0 else torch.tensor([0., 1.], device=device)] for d in raw_dev_data]
 
     train_loader = data.DataLoader(dataset=train_data, batch_size=config.batch_size)
 
@@ -118,11 +109,11 @@ def train(config):
                     epoch + 1,
                     config.epoch,
                     i + 1, len(train_data) // config.batch_size,
-                    local_loss * 1000000))
+                    local_loss / 400))
                 local_loss = 0
 
         # eval
-        valid_acc, valid_loss = eval(model, criterion, dev_data, config.batch_size)
+        valid_acc, valid_loss = eval(model, criterion, dev_data)
         print("[%d/%d]: Loss %.3f, Accuracy: %.3f" % (epoch+1, config.epoch, valid_loss, valid_acc))
 
         # save checkpoint
@@ -167,23 +158,14 @@ def test(config):
         else:
             total_ir_sent += 1
 
-        # for batch
-        q_input = _input[0].unsqueeze(0)
-        s_input = _input[1].unsqueeze(0)
-        for _ in range(config.batch_size - 1):
-            q_input = torch.cat((q_input, _input[0].unsqueeze(0)), dim=0)
-            s_input = torch.cat((s_input, _input[1].unsqueeze(0)), dim=0)
-
-        batch_input = [q_input, s_input]
-
-        hq0, cq0 = model.init_hidden()
+        hq0, cq0 = model.init_hidden(batch_size=1)
         hq0, cq0 = hq0.to(device), cq0.to(device)
 
-        hs0, cs0 = model.init_hidden()
+        hs0, cs0 = model.init_hidden(batch_size=1)
         hs0, cs0 = hs0.to(device), cs0.to(device)
 
         # get last layer's output(using [-1]) and only one result(using [0]) from batch
-        output = model(batch_input, (hq0, cq0), (hs0, cs0))[0]
+        output = model(_input, (hq0, cq0), (hs0, cs0))[0]
 
         _, i = torch.max(output, 0)
         if i.item() == _target.item():
