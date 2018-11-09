@@ -13,10 +13,21 @@ from const import *
 def eval(model, criterion, valid_data, batch_size):
     total_loss = 0
     total_num_correct = 0
+    # gold sentence
+    total_gold_sent = 0
+    gold_sent_correct = 0
+    # irrelevant sentence
+    total_ir_sent = 0
+    ir_correct = 0
 
     for i in tqdm(range(len(valid_data))):
         _input = valid_data[i][0]
         _target = valid_data[i][1]
+        if _target.item() == 1:
+            total_gold_sent += 1
+        else:
+            total_ir_sent += 1
+
         # for batch
         q_input = _input[0].unsqueeze(0)
         s_input = _input[1].unsqueeze(0)
@@ -40,7 +51,14 @@ def eval(model, criterion, valid_data, batch_size):
         _, i = torch.max(output, 0)
         if i.item() == _target.item():
             total_num_correct += 1
+            if _target.item() == 1:
+                gold_sent_correct += 1
+            else:
+                ir_correct += 1
 
+    print("gold sent accuracy: %.3f / ir sent accuracy: %.3f" % (
+            gold_sent_correct/total_gold_sent*100,
+            ir_correct/total_ir_sent*100))
     return total_num_correct/len(valid_data)*100, total_loss/len(valid_data)
 
 
@@ -82,6 +100,7 @@ def train(config):
     hs0, cs0 = model.init_hidden()
     hs0, cs0 = hs0.to(device), cs0.to(device)
 
+    print("training...")
     for epoch in range(config.epoch):
         for i, (batch_input, batch_target) in enumerate(train_loader):
             model.zero_grad()  # torch accumulate gradients, making them zero for each minibatch
@@ -99,7 +118,6 @@ def train(config):
                     i + 1, len(train_data) // config.batch_size,
                     local_loss / 400))
                 local_loss = 0
-            break
 
         # eval
         valid_acc, valid_loss = eval(model, criterion, dev_data, config.batch_size)

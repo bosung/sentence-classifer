@@ -25,9 +25,9 @@ class Config:
     c_sent_max_length = 30
     batch_size = 64
     epoch = 10
-    learning_rate = 0.1
-    optim = "SGD"
-    # optim = "RMSprop"
+    learning_rate = 0.001
+    # optim = "SGD"
+    optim = "RMSprop"
     # optim = "Adam"
 
     # train
