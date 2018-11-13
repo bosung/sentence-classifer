@@ -1,5 +1,6 @@
 import argparse
 import prepro
+import sim_eval
 import ujson as json
 import torch.nn as nn
 import torch.utils.data as data
@@ -29,14 +30,8 @@ def eval(model, criterion, valid_data):
         else:
             total_ir_sent += 1
 
-        hq0, cq0 = model.init_hidden(batch_size=1)
-        hq0, cq0 = hq0.to(device), cq0.to(device)
-
-        hs0, cs0 = model.init_hidden(batch_size=1)
-        hs0, cs0 = hs0.to(device), cs0.to(device)
-
         _input = [_input[0].unsqueeze(0), _input[1].unsqueeze(0)]
-        output = model(_input, (hq0, cq0), (hs0, cs0))
+        output = model(_input)
         loss = criterion(output, _target.unsqueeze(0))
         total_loss += float(loss)
 
@@ -52,7 +47,7 @@ def eval(model, criterion, valid_data):
     print("gold sent accuracy: %.3f / ir sent accuracy: %.3f" % (
             gold_sent_correct/total_gold_sent*100,
             ir_correct/total_ir_sent*100))
-    return total_num_correct/len(valid_data)*100, total_loss/len(valid_data)
+    return gold_sent_correct/total_gold_sent*100, total_loss/len(valid_data)
 
 
 def train(config):
@@ -87,17 +82,11 @@ def train(config):
     best_accuracy = 0
     local_loss = 0
 
-    hq0, cq0 = model.init_hidden()
-    hq0, cq0 = hq0.to(device), cq0.to(device)
-
-    hs0, cs0 = model.init_hidden()
-    hs0, cs0 = hs0.to(device), cs0.to(device)
-
     print("training...")
     for epoch in range(config.epoch):
         for i, (batch_input, batch_target) in enumerate(train_loader):
             model.zero_grad()  # torch accumulate gradients, making them zero for each minibatch
-            tag_scores = model(batch_input, (hq0, cq0), (hs0, cs0))
+            tag_scores = model(batch_input)
             # tag_scores = (num_layers, batch_size, class_num)
             loss = criterion(tag_scores, batch_target)
             loss.backward()
@@ -127,7 +116,7 @@ def train(config):
                 # save model state dict
                 print("New record [%d/%d]: %.3f" % (epoch+1, config.epoch, valid_acc))
                 print(checkpoint)
-                torch.save(model.state_dict(), config.state_dict+str(epoch))
+                torch.save(model.state_dict(), config.state_dict+str(epoch) + "-" + str(round(valid_acc, 2)))
                 best_accuracy = valid_acc
 
 
@@ -181,39 +170,6 @@ def test(config):
         ir_correct/total_ir_sent*100))
 
 
-def sim_eval(config):
-    """ sentence similarity evaluation """
-    with open(config.test_file, "r") as fh:
-        raw_test_data = json.load(fh)
-        test_data = [[
-            torch.tensor(d["premise_idx"]+d["hypothesis_idx"], device=device),
-            torch.tensor(d["label_idx"], device=device)] for d in raw_test_data]
-
-    total_num_correct = 0
-
-    model = SentenceEncoder(config.glove_dim, batch_size=config.batch_size).to(device)
-    model.load_state_dict(torch.load(config.test_model))
-
-    for i in tqdm(range(len(test_data))):
-        _input = test_data[i][0]
-        _target = test_data[i][1]
-        # for batch
-        batch_input = _input.unsqueeze(0)
-        for _ in range(config.batch_size - 1):
-            batch_input = torch.cat((batch_input, _input.unsqueeze(0)), dim=0)
-
-        hq0, cq0 = model.init_hidden()
-        hq0, cq0 = hq0.to(device), cq0.to(device)
-
-        hs0, cs0 = model.init_hidden()
-        hs0, cs0 = hs0.to(device), cs0.to(device)
-
-        # get last layer's output(using [-1]) and only one result(using [0]) from batch
-        q, s = model.sent_embed(batch_input, (hq0, cq0), (hs0, cs0))[0]
-
-    print("model: %s, accuracy: %.3f" % (config.test_model, (total_num_correct/len(test_data)*100)))
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--mode', default='debug')
@@ -231,7 +187,7 @@ if __name__ == "__main__":
     elif args.mode == 'test':
         test(config)
     elif args.mode == 'sim-eval':
-        sim_eval(config)
+        sim_eval.eval(config)
     else:
         print("Unknown mode")
         exit(0)
