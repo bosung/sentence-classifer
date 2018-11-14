@@ -35,7 +35,7 @@ class SentenceEncoder(nn.Module):
         hq1, hq2, hs1, hs2 = hq[0], hq[1], hs[0], hs[1]
         sub = hq1 + (-hs1)
         mul = torch.mul(hq1, hs1)
-        out = self.last(torch.cat((torch.cat((hq1, hq2), dim=1),
+        out = self.last(torch.cat((torch.cat((hq1, hs1), dim=1),
                                    torch.cat((sub, mul), dim=1)), dim=1))
         # return self.softmax(out)  # Logsoftmax with NLLLoss
         return self.sigmoid(out)  # sigmoid with BCELoss
