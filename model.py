@@ -18,7 +18,7 @@ class SentenceEncoder(nn.Module):
 
         self.lstm = nn.LSTM(word_dim, self.q_hidden_size, num_layers=num_layers, batch_first=True,
                             bidirectional=True)
-        self.last = nn.Linear(self.q_hidden_size * 4, 2)
+        self.last = nn.Linear(self.q_hidden_size * 2, 2)
         self.softmax = nn.LogSoftmax(dim=1)
         self.sigmoid = nn.Sigmoid()
 
@@ -43,8 +43,15 @@ class SentenceEncoder(nn.Module):
     def sent_embed(self, _input):
         embedded = self.word_embedding(_input)
 
+        # 1. encoder last hidden
         _, (hq, cn) = self.lstm(embedded)
+        _f, _b = hq
+        return torch.cat((_f, _b), dim=1)
+        """
+        # 2. word embedding avg
+        hq = torch.mean(embedded, dim=1).squeeze(1)
         return hq
+        """
 
     def init_hidden(self, batch_size=None):
         if batch_size is None:

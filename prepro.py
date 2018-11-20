@@ -74,9 +74,7 @@ def parse_file(raw_file, word_counter):
 
 def build_sent_sim(config):
     """ parse raw json file and make train file for sentence similarity """
-    obj_file = config.raw_json_train_file
-    # obj_file = config.raw_json_test_file
-    # obj_file = config.raw_json_dev_file
+    obj_file = config.raw_json_dev_file
     print("[INFO] parsing %s..." % obj_file)
     data = []
     with open(obj_file, "r") as f:

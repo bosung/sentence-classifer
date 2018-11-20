@@ -6,18 +6,20 @@ class Config:
     # data
     home = os.getcwd()
     data_dir = os.path.join(home, "data")
-    # raw_json_train_file = os.path.join(home, "datasets", "squad", "train-v2.0.json")
+    raw_json_train_file = os.path.join(home, "datasets", "squad", "train-v2.0.json")
+    raw_json_dev_file = os.path.join(home, "datasets", "squad", "dev-v2.0.json")
     # raw_json_dev_file = os.path.join(home, "datasets", "squad", "squad_2.0_output_1.json")
-    # raw_json_test_file = os.path.join(home, "datasets", "squad", "squad_2.0_output_2.json")
-    raw_json_train_file = os.path.join("/home/nlp908", "data", "squad", "train-v2.0.json")
-    raw_json_dev_file = os.path.join("/home/nlp908", "data", "squad", "squad_2.0_output_1.json")
-    raw_json_test_file = os.path.join("/home/nlp908", "data", "squad", "squad_2.0_output_2.json")
+    raw_json_test_file = os.path.join(home, "datasets", "squad", "squad_2.0_output_2.json")
+    # raw_json_train_file = os.path.join("/home/nlp908", "data", "squad", "train-v2.0.json")
+    # raw_json_dev_file = os.path.join("/home/nlp908", "data", "squad", "squad_2.0_output_1.json")
+    # raw_json_test_file = os.path.join("/home/nlp908", "data", "squad", "squad_2.0_output_2.json")
     train_file = os.path.join(home, "data", "train.json")
     dev_file = os.path.join(home, "data", "dev.json")
     test_file = os.path.join(home, "data", "test.json")
 
     # sentence similarity expr
-    sim_eval_test = os.path.join(data_dir, "sim-eval.json")
+    # sim_eval_test = os.path.join(data_dir, "sim-eval-train.json")
+    sim_eval_test = os.path.join(data_dir, "sim-eval-dev.json")
 
     # word embedding
     word_emb_file = os.path.join(data_dir, "word_emb.json")

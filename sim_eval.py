@@ -8,33 +8,64 @@ import torch.nn as nn
 cos = nn.CosineSimilarity()
 
 
+def get_top_n(data, n):
+    sorted_dict = {}
+    num = 0
+    for key, value in reversed(sorted(data.items(), key=lambda i: (i[1], i[0]))):
+        sorted_dict[key] = value
+        num += 1
+        if num == n:
+            break
+    return sorted_dict
+
+
 def eval(config):
     """ sentence similarity evaluation """
-    with open(config.test_file, "r") as fh:
+    with open(config.sim_eval_test, "r") as fh:
         test_data = json.load(fh)
-        #test_data = [[
-        #    torch.tensor(d["question_idx"], device=device),
-        #    torch.tensor(d["context_sents"], device=device)] for d in raw_test_data]
+    with open(config.word_emb_file, "r") as fh:
+        word_mat = torch.tensor(json.load(fh), device=device)
 
-    total_num_correct = 0
+    accuracy1 = 0
+    accuracy2 = 0
+    accuracy3 = 0
 
-    model = SentenceEncoder(config.glove_dim, batch_size=config.batch_size).to(device)
+    model = SentenceEncoder(config.glove_dim, embeddings=word_mat, batch_size=config.batch_size).to(device)
     # model.load_state_dict(torch.load(config.test_model))
 
+    print("average-of-word-embedding")
     for i in tqdm(range(len(test_data))):
-        _input = torch.tensor(test_data[i]["question"]).to(device)
-        _target = torch.tensor(test_data[i]["context_sent_list"]).to(device)
-        # for batch
+        answer_idx = list(set(test_data[i]["answer_idx"]))
+        _input = torch.tensor(test_data[i]["question_idx"]).to(device)
+        _target = torch.tensor(test_data[i]["context_sent_list_idx"]).to(device)
 
-        # get last layer's output(using [-1]) and only one result(using [0]) from batch
-        q_f, q_b = model.sent_embed(_input)
-        q = torch.cat((q_f, q_b), dim=1)
-        s_f, s_b = model.sent_embed(_target)
-        s = torch.cat((s_f, s_b), dim=1)
+        q = model.sent_embed(_input.unsqueeze(0))
+        s = model.sent_embed(_target)
 
-        temp = []
+        temp = {}
         for j in range(s.size(0)):
-            print(j)
-            temp.append(cos(q, s[j]))
+            temp[j] = cos(q, s[j].unsqueeze(0))
 
-    print("model: %s, accuracy: %.3f" % (config.test_model, (total_num_correct/len(test_data)*100)))
+        sorted_score = get_top_n(temp, 3)
+        for k in sorted_score:
+            if k in answer_idx:
+                accuracy3 += 1
+                break
+
+        sorted_score = get_top_n(temp, 2)
+        for k in sorted_score:
+            if k in answer_idx:
+                accuracy2 += 1
+                break
+
+        sorted_score = get_top_n(temp, 1)
+        for k in sorted_score:
+            if k in answer_idx:
+                accuracy1 += 1
+                break
+
+    print("model: %s, accuracy@1: %.3f, accuracy@2: %.3f, accuracy@3: %.3f" % (
+        config.test_model,
+        (accuracy1/len(test_data)*100),
+        (accuracy2/len(test_data)*100),
+        (accuracy3/len(test_data)*100)))
