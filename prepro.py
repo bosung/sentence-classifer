@@ -4,6 +4,7 @@ from collections import Counter
 import numpy as np
 from codecs import open
 import spacy
+from nltk.tokenize import sent_tokenize
 
 nlp = spacy.blank("en")
 
@@ -13,17 +14,15 @@ def word_tokenize(sent):
     return [token.text for token in doc]
 
 
-def sent_tokenize(context):
-    sent_list = []
+def sentence_tokenize(context):
+    sent_list = list()
     start_idx = 0
-    next_period = context.find('. ')
-    end_idx = next_period
-    while next_period > 0:
-        sent_list.append([(start_idx, end_idx+1), context[start_idx:end_idx+1]])
-        start_idx = end_idx+2
-        next_period = context[start_idx:].find('. ')
-        end_idx = start_idx + next_period
-    sent_list.append([(start_idx, len(context)), context[start_idx:]])
+    for i, raw_sent in enumerate(sent_tokenize(context)):
+        sent_tokens = word_tokenize(raw_sent)
+        end_idx = start_idx + len(raw_sent) - 1
+        sent_list.append([(start_idx, end_idx), raw_sent, sent_tokens])
+        # add 2 for last space.
+        start_idx = end_idx + 2
     return sent_list
 
 
@@ -38,17 +37,17 @@ def parse_file(raw_file, word_counter):
             paragraphs = article["paragraphs"]
             for p in paragraphs:
                 context = p["context"]
-                context_sents = sent_tokenize(context)
 
-                for (_, sent) in context_sents:
-                    tokens = word_tokenize(sent)
-                    for t in tokens:
+                context_sents = sentence_tokenize(context)
+                for (_, _, sent_tokens) in context_sents:
+                    for t in sent_tokens:
                         word_counter[t] += 1
 
                 qas = p["qas"]
                 for qa in qas:
                     q = qa["question"]
                     # answers = qa["answers"]  # list type of dict('text', 'answer_start')
+                    _id = qa["id"]
                     is_impossible = qa["is_impossible"]
                     if is_impossible:
                         answers = qa["plausible_answers"]
@@ -59,14 +58,61 @@ def parse_file(raw_file, word_counter):
                     for t in q_tokens:
                         word_counter[t] += 1
 
-                    for (idx, sent) in context_sents:
+                    for (idx, raw_sent, sent_tokens) in context_sents:
                         data.append({"question": q,
+                                     "q_tokens": q_tokens,
+                                     "id": _id,
                                      "answers": answers,
                                      "is_impossible": is_impossible,
-                                     "context_sent": sent,
+                                     "context_raw_sent": raw_sent,
+                                     "context_sent_tokens": sent_tokens,
                                      "context_idx": idx})
 
     print("[DONE] parsing %s" % raw_file)
+    return data
+
+
+def build_sent_sim(config):
+    """ parse raw json file and make train file for sentence similarity """
+    obj_file = config.raw_json_dev_file
+    print("[INFO] parsing %s..." % obj_file)
+    data = []
+    with open(obj_file, "r") as f:
+        source = json.load(f)
+        articles = source["data"]
+        for article in articles:
+            paragraphs = article["paragraphs"]
+            for p in paragraphs:
+                context = p["context"]
+                context_sents = sentence_tokenize(context)
+
+                qas = p["qas"]
+                for qa in qas:
+                    q = qa["question"]
+                    _id = qa["id"]
+                    is_impossible = qa["is_impossible"]
+                    if is_impossible:
+                        answers = qa["plausible_answers"]
+                    else:
+                        answers = qa["answers"]
+
+                    answer_idx = []
+                    for ans in answers:
+                        answer_start = int(ans["answer_start"])
+                        for i, (idx, raw_sent, sent_tokens) in enumerate(context_sents):
+                            si, ei = idx
+                            if si <= answer_start <= ei:
+                                answer_idx.append(i)
+
+                    data.append({"question": q,
+                                 "q_tokens": word_tokenize(q),
+                                 "id": _id,
+                                 "answers": answers,
+                                 "is_impossible": is_impossible,
+                                 "context_sent_list": context_sents,
+                                 "answer_idx": answer_idx})
+
+    print("[DONE] parsing %s" % obj_file)
     return data
 
 
@@ -111,40 +157,53 @@ def get_embedding(counter, data_type, emb_file=None, size=None, vec_size=None):
     return emb_mat, token2idx_dict
 
 
-def build_features(data, word2idx_dict, config):
+def get_word(word2idx_dict, word):
+    if word == 0:
+        return 1
+    for each in (word, word.lower(), word.capitalize(), word.upper()):
+        if each in word2idx_dict:
+            return word2idx_dict[each]
+    return 1
+
+
+def convert2idx_with_padding(tokens, w2i_dict, _max_length):
+    result = list()
+    for _token in tokens:
+        result.append(get_word(w2i_dict, _token))
+
+    if len(tokens) < _max_length:
+        # padding
+        for _ in range(_max_length - len(tokens)):
+            result.append(0)
+        return result
+    else:
+        return result[:_max_length]
+
+
+def build_features(data, w2i_dict, config):
     q_max_length = config.q_max_length
     c_sent_max_length = config.c_sent_max_length
 
-    def _get_word(word):
-        for each in (word, word.lower(), word.capitalize(), word.upper()):
-            if each in word2idx_dict:
-                return word2idx_dict[each]
-        return 1
-
-    def _convert2idx_with_padding(tokens, _max_length):
-        result = list()
-        for _token in tokens:
-            result.append(_get_word(_token))
-
-        if len(tokens) < _max_length:
-            # padding
-            for _ in range(_max_length - len(tokens)):
-                result.append(0)
-            return result
-        else:
-            return result[:_max_length]
-
     for d in data:
-        d["question_idx"] = _convert2idx_with_padding(d["question"], q_max_length)
-        d["sentence_idx"] = _convert2idx_with_padding(d["context_sent"], c_sent_max_length)
-        for ans in d["answers"]:
-            answer_start = int(ans["answer_start"])
-            sent_start, sent_end = int(d["context_idx"][0]), int(d["context_idx"][1])
-            if sent_start <= answer_start <= sent_end:
-                d["label_idx"] = 1
-                break
-            else:
-                d["label_idx"] = 0
+        d["question_idx"] = convert2idx_with_padding(d["q_tokens"], w2i_dict, q_max_length)
+        if "context_sent_tokens" in d:
+            d["sentence_idx"] = convert2idx_with_padding(d["context_sent_tokens"], w2i_dict, c_sent_max_length)
+            for ans in d["answers"]:
+                answer_start = int(ans["answer_start"])
+                answer_end = answer_start + len(ans['text']) - 1
+                sent_start, sent_end = int(d["context_idx"][0]), int(d["context_idx"][1])
+                if sent_start <= answer_start <= sent_end:
+                    d["label_idx"] = 1
+                    break
+                elif sent_start <= answer_end <= sent_end:
+                    d["label_idx"] = 1
+                    break
+                else:
+                    d["label_idx"] = 0
+        if "context_sent_list" in d:
+            d["context_sent_list_idx"] = []
+            for i, (idx, raw_sent, sent_tokens) in enumerate(d["context_sent_list"]):
+                d["context_sent_list_idx"].append(convert2idx_with_padding(sent_tokens, w2i_dict, c_sent_max_length))
 
 
 def prepro(config):
@@ -160,8 +219,17 @@ def prepro(config):
     build_features(train_data, word2idx_dict, config)
     build_features(dev_data, word2idx_dict, config)
     build_features(test_data, word2idx_dict, config)
-
+    
     save(config.word_emb_file, word_emb_mat, message="word embedding")
+    save(config.word2idx_file, word2idx_dict, message="word2idx")
     save(config.train_file, train_data, message="train data")
     save(config.dev_file, dev_data, message="dev data")
     save(config.test_file, test_data, message="test data")
+
+    # sentence sim-eval
+    # f = open(config.word2idx_file, 'r')
+    # word2idx_dict = json.load(f)
+    sim_eval = build_sent_sim(config)
+    build_features(sim_eval, word2idx_dict, config)
+    save(config.sim_eval_test, sim_eval, message="sentence similarity test file")
+
