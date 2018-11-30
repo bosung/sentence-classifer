@@ -33,7 +33,6 @@ def eval(config):
     model = SentenceEncoder(config.glove_dim, embeddings=word_mat, batch_size=config.batch_size).to(device)
     # model.load_state_dict(torch.load(config.test_model))
 
-    print("average-of-word-embedding")
     for i in tqdm(range(len(test_data))):
         answer_idx = list(set(test_data[i]["answer_idx"]))
         _input = torch.tensor(test_data[i]["question_idx"]).to(device)
@@ -44,8 +43,19 @@ def eval(config):
 
         temp = {}
         for j in range(s.size(0)):
-            temp[j] = cos(q, s[j].unsqueeze(0))
+            temp[j] = model.get_prob(q, s[j].unsqueeze(0))
+        """
 
+        # self attention
+        i_e = model.word_embedding(_input.unsqueeze(0))
+        t_e = model.word_embedding(_target)
+
+        temp = {}
+        for j in range(t_e.size(0)):
+            q, s = model.self_attn(i_e, t_e[j].unsqueeze(0))
+            temp[j] = model.get_prob(q, s)
+        """
+        # calc accuracy
         sorted_score = get_top_n(temp, 3)
         for k in sorted_score:
             if k in answer_idx:

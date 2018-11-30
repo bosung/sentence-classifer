@@ -206,6 +206,19 @@ def build_features(data, w2i_dict, config):
                 d["context_sent_list_idx"].append(convert2idx_with_padding(sent_tokens, w2i_dict, c_sent_max_length))
 
 
+def build_transfer_data(raw_file, w2i_dict, config):
+    q_max_length = config.q_max_length
+    c_sent_max_length = config.c_sent_max_length
+
+    with open(raw_file, "r") as f:
+        data = json.load(f)
+        for d in data:
+            d["question_idx"] = convert2idx_with_padding(d["question"], w2i_dict, q_max_length)
+            d["context_idx"] = convert2idx_with_padding(d["filtered_context"], w2i_dict, c_sent_max_length)
+
+        return data
+
+
 def prepro(config):
     word_counter, char_counter = Counter(), Counter()
 
@@ -233,3 +246,11 @@ def prepro(config):
     build_features(sim_eval, word2idx_dict, config)
     save(config.sim_eval_test, sim_eval, message="sentence similarity test file")
 
+    # transfer
+    # f = open(config.word2idx_file, 'r')
+    # word2idx_dict = json.load(f)
+    transfer_train = build_transfer_data(config.transfer_train_file, word2idx_dict, config)
+    transfer_dev = build_transfer_data(config.transfer_dev_file, word2idx_dict, config)
+
+    save(config.transfer_train_file, transfer_train, message="transfer train file")
+    save(config.transfer_dev_file, transfer_dev, message="transfer dev file")

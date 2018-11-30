@@ -1,6 +1,8 @@
 import argparse
 import prepro
 import sim_eval
+import snli
+import transfer
 import ujson as json
 import torch.nn as nn
 import torch.utils.data as data
@@ -107,18 +109,18 @@ def train(config):
             epoch+1, config.epoch, valid_loss, valid_acc, valid_gold_acc))
 
         # save checkpoint
-        if (epoch + 1) % config.checkpoint == 0 or (epoch + 1) == config.epoch:
+        if valid_gold_acc > best_accuracy:
             checkpoint = {
                 'model': model,
                 'optim': optimizer,
                 'loss': valid_loss
             }
-            if valid_gold_acc > best_accuracy:
-                # save model state dict
-                print("New record [%d/%d]: %.3f / gold sent acc: %.3f" % (epoch+1, config.epoch, valid_acc, valid_gold_acc))
-                print(checkpoint)
-                torch.save(model.state_dict(), config.state_dict+str(epoch) + "-" + str(round(valid_gold_acc, 2)))
-                best_accuracy = valid_gold_acc
+
+            # save model state dict
+            print("New record [%d/%d]: %.3f / gold sent acc: %.3f" % (epoch+1, config.epoch, valid_acc, valid_gold_acc))
+            print(checkpoint)
+            torch.save(model.state_dict(), config.state_dict+str(epoch) + "-" + str(round(valid_gold_acc, 2)))
+            best_accuracy = valid_gold_acc
 
 
 def test(config):
@@ -186,6 +188,12 @@ if __name__ == "__main__":
         test(config)
     elif args.mode == 'sim-eval':
         sim_eval.eval(config)
+    elif args.mode == 'snli-train':
+        snli.train(config)
+    elif args.mode == 'snli-test':
+        snli.test(config)
+    elif args.mode == 'transfer':
+        transfer.transfer(config)
     else:
         print("Unknown mode")
         exit(0)
