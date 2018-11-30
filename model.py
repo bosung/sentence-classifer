@@ -123,20 +123,64 @@ class NLIEncoder(nn.Module):
             self.word_embedding = nn.Embedding.from_pretrained(embeddings, freeze=False)
 
         self.lstm = nn.LSTM(word_dim, hidden_size, num_layers=num_layers, batch_first=True)
+        self.lstm_cell = nn.LSTMCell(word_dim, self.hidden_size)
         self.last = nn.Linear(hidden_size * 4, 3)
         self.softmax = nn.LogSoftmax(dim=1)
+        self.softmax_2 = nn.Softmax(dim=2)
         self.bi_clf = nn.Linear(hidden_size * 4, 2)
+
+    def self_attn(self, _input, _target):
+        _i = self.get_hidden_matrix(self.word_embedding(_input))
+        _t = self.get_hidden_matrix(self.word_embedding(_target))
+        _tt = _t.transpose(1, 2)
+
+        attn_mat = torch.bmm(_i, _tt)
+        attn_mat1 = self.softmax_2(attn_mat)
+        output1 = torch.bmm(attn_mat1, _t)
+        hq = torch.max(output1, dim=1)[0]
+
+        attn_mat2 = self.softmax_2(attn_mat.transpose(1, 2))
+        output2 = torch.bmm(attn_mat2, _i)
+        hs = torch.max(output2, dim=1)[0]
+
+        return hq, hs
+
+    def get_hidden_matrix(self, _input):
+        vector = _input.transpose(1, 0)
+        # vector -> (max_length, batch_size, input_size)
+
+        hx, cx = self.lstm_cell(vector[0])
+        output = hx.unsqueeze(1)
+        # hx -> (batch, 1, hidden_size)
+        for i in range(1, vector.size(0)):
+            hx, cx = self.lstm_cell(vector[i], (hx, cx))
+            output = torch.cat((output, hx.unsqueeze(1)), dim=1)
+
+        return output
+
+    def max_pooling(self, _input):
+        output = self.get_hidden_matrix(_input)
+        return torch.max(output, dim=1)[0]
+
+    def get_sent_embed(self, _input):
+        x = self.word_embedding(_input)
+        """
+        # 1. LSTM last hidden
+        _, (h, c) = self.lstm(x)
+        output = h[-1]
+        """
+        # 2. LSTM max pooling
+        output = self.max_pooling(x)
+        return output
 
     def forward(self, _input):
         # input: [premise, hypothesis]
-        premise = self.word_embedding(_input[0])
-        hypothesis = self.word_embedding(_input[1])
+        premise = _input[0]
+        hypothesis = _input[1]
 
-        _, (hp, c1) = self.lstm(premise)
-        _, (hh, c2) = self.lstm(hypothesis)
-
-        hp = hp[-1]
-        hh = hh[-1]
+        # hp = self.get_sent_embed(premise)
+        # hh = self.get_sent_embed(hypothesis)
+        hp, hh = self.self_attn(premise, hypothesis)
 
         sub = hp + (-hh)
         mul = torch.mul(hp, hh)
@@ -145,14 +189,11 @@ class NLIEncoder(nn.Module):
         return self.softmax(out)
 
     def transfer(self, _input):
-        question = self.word_embedding(_input[0])
-        context = self.word_embedding(_input[1])
+        question = _input[0]
+        context = _input[1]
 
-        _, (hp, c1) = self.lstm(question)
-        _, (hh, c2) = self.lstm(context)
-
-        hp = hp[-1]
-        hh = hh[-1]
+        hp = self.get_sent_embed(question)
+        hh = self.get_sent_embed(context)
 
         sub = hp + (-hh)
         mul = torch.mul(hp, hh)

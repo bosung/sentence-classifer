@@ -13,6 +13,11 @@ def eval(model, criterion, valid_data):
     total_num_correct = 0
     random.shuffle(valid_data)
 
+    yes_answer = 0
+    no_answer = 0
+    yes_answer_correct = 0
+    no_answer_correct = 0
+
     for i in tqdm(range(len(valid_data))):
         _input = valid_data[i][0]
         _target = valid_data[i][1]
@@ -25,9 +30,24 @@ def eval(model, criterion, valid_data):
         total_loss += float(loss)
 
         _, i = torch.max(output[0], 0)
+
+        if _target.item() == 0:
+            yes_answer += 1
+        else:
+            no_answer += 1
+
         if i.item() == _target.item():
             total_num_correct += 1
+            if i.item() == 0:
+                yes_answer_correct += 1
+            else:
+                no_answer_correct += 1
 
+    print("YES ANSWER: %.2f (%d/%d), NO ANSWER: %.2f (%d/%d)" % (
+        yes_answer_correct/yes_answer*100,
+        yes_answer_correct, yes_answer,
+        no_answer_correct/no_answer*100,
+        no_answer_correct, no_answer))
     return total_num_correct/len(valid_data)*100, total_loss/len(valid_data)
 
 
