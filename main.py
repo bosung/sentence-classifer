@@ -26,13 +26,14 @@ def eval(model, criterion, valid_data):
     for i in tqdm(range(len(valid_data))):
         _input = valid_data[i][0]
         _target = valid_data[i][1]
+
         _, ti = torch.max(_target, 0)
         if ti.item() == 1:
             total_gold_sent += 1
         else:
             total_ir_sent += 1
 
-        _input = [_input[0].unsqueeze(0), _input[1].unsqueeze(0)]
+        # _input = [_input[0].unsqueeze(0), _input[1].unsqueeze(0)]
         output = model(_input)
         loss = criterion(output, _target.unsqueeze(0))
         total_loss += float(loss)
@@ -55,17 +56,18 @@ def eval(model, criterion, valid_data):
 def train(config):
     with open(config.word_emb_file, "r") as fh:
         word_mat = torch.tensor(json.load(fh), device=device)
-    with open(config.train_file, "r") as fh:
+    # with open(config.train_file, "r") as fh:
+    with open(config.dev_file, "r") as fh:
         raw_train_data = json.load(fh)
         train_data = [[
-            (torch.tensor(d["question_idx"], device=device),
-             torch.tensor(d["sentence_idx"], device=device)),
+            ([torch.tensor(d["question_idx"]).to(device), torch.tensor(d["question_char_idx"]).to(device)],
+             [torch.tensor(d["sentence_idx"]).to(device), torch.tensor(d["sentence_char_idx"]).to(device)]),
             torch.tensor([1., 0.], device=device) if d["label_idx"] == 0 else torch.tensor([0., 1.], device=device)] for d in raw_train_data]
     with open(config.dev_file, "r") as fh:
         raw_dev_data = json.load(fh)
         dev_data = [[
-            (torch.tensor(d["question_idx"], device=device),
-             torch.tensor(d["sentence_idx"], device=device)),
+            ([torch.tensor(d["question_idx"]).to(device), torch.tensor(d["question_char_idx"]).to(device)],
+             [torch.tensor(d["sentence_idx"]).to(device), torch.tensor(d["sentence_char_idx"]).to(device)]),
             torch.tensor([1., 0.], device=device) if d["label_idx"] == 0 else torch.tensor([0., 1.], device=device)] for d in raw_dev_data]
 
     train_loader = data.DataLoader(dataset=train_data, batch_size=config.batch_size)

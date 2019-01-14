@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.utils.data as data
 from torch import optim
 from tqdm import tqdm
-from model import NLIEncoder
+from model import SentenceEncoder
 from const import *
 
 
@@ -17,7 +17,7 @@ def eval(model, criterion, valid_data):
         _input = valid_data[i][0]
         _target = valid_data[i][1]
 
-        batch_input = [_input[0].unsqueeze(0), _input[1].unsqueeze(0)]
+        batch_input = _input
 
         # get last layer's output(using [-1])
         output = model(batch_input)
@@ -37,19 +37,19 @@ def train(config):
     with open(config.snli_train_file, "r") as fh:
         raw_train_data = json.load(fh)
         train_data = [[
-            (torch.tensor(d["premise_idx"], device=device),
-             torch.tensor(d["hypothesis_idx"], device=device)),
+            ([torch.tensor(d["premise_idx"]).to(device), torch.tensor(d["premise_char_idx"]).to(device)],
+             [torch.tensor(d["hypothesis_idx"]).to(device), torch.tensor(d["hypothesis_char_idx"]).to(device)]),
             torch.tensor(d["label_idx"], device=device)] for d in raw_train_data]
     with open(config.snli_dev_file, "r") as fh:
         raw_dev_data = json.load(fh)
         dev_data = [[
-            (torch.tensor(d["premise_idx"], device=device),
-             torch.tensor(d["hypothesis_idx"], device=device)),
+            ([torch.tensor(d["premise_idx"]).to(device), torch.tensor(d["premise_char_idx"]).to(device)],
+             [torch.tensor(d["hypothesis_idx"]).to(device), torch.tensor(d["hypothesis_char_idx"]).to(device)]),
             torch.tensor(d["label_idx"], device=device)] for d in raw_dev_data]
 
     train_loader = data.DataLoader(dataset=train_data, batch_size=config.batch_size, shuffle=True)
 
-    model = NLIEncoder(config.glove_dim, embeddings=word_mat, batch_size=config.batch_size).to(device)
+    model = SentenceEncoder(config.glove_dim, embeddings=word_mat, batch_size=config.batch_size).to(device)
 
     if config.optim == 'RMSprop':
         optimizer = optim.RMSprop(model.parameters(), lr=config.learning_rate)
@@ -99,6 +99,10 @@ def train(config):
             print(checkpoint)
             torch.save(model.state_dict(), config.snli_state_dict + str(epoch) + '-' + str(round(valid_acc, 2)))
             best_accuracy = valid_acc
+        else:
+            # adjust lr
+            for g in optimizer.param_groups:
+                g['lr'] = g['lr'] * 0.85
 
 
 def test(config):
@@ -113,7 +117,7 @@ def test(config):
 
     total_num_correct = 0
 
-    model = NLIEncoder(config.glove_dim, embeddings=word_mat, batch_size=config.batch_size).to(device)
+    model = SentenceEncoder(config.glove_dim, embeddings=word_mat, batch_size=config.batch_size).to(device)
     model.load_state_dict(torch.load(config.snli_test_model))
 
     for i in tqdm(range(len(test_data))):

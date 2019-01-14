@@ -8,9 +8,11 @@ class Config:
     # data
     home = os.getcwd()
     data_dir = os.path.join(home, "data")
-    # raw_json_train_file = os.path.join(home, "datasets", "squad", "train-v2.0.json")
-    # raw_json_dev_file = os.path.join(home, "datasets", "squad", "squad_2.0_output_1.json")
+    raw_json_train_file = os.path.join(home, "datasets", "squad", "train-v2.0.json")
+    raw_json_dev_file = os.path.join(home, "datasets", "squad", "squad_2.0_output_1.json")
     raw_json_test_file = os.path.join(home, "datasets", "squad", "squad_2.0_output_2.json")
+    # raw_json_dev_file = os.path.join(home, "datasets", "squad", "dev-v2.0.json")
+    # raw_json_test_file = os.path.join(home, "datasets", "squad", "dev-v2.0.json")
     # raw_json_train_file = os.path.join("/home/nlp908", "data", "squad", "train-v2.0.json")
     # raw_json_dev_file = os.path.join("/home/nlp908", "data", "squad", "squad_2.0_output_1.json")
     # raw_json_test_file = os.path.join("/home/nlp908", "data", "squad", "squad_2.0_output_2.json")
@@ -31,8 +33,9 @@ class Config:
     transfer_dev_file = os.path.join(data_dir, "answerable-dev.json")
 
     # sentence similarity expr
-    # sim_eval_test = os.path.join(data_dir, "sim-eval-train.json")
-    sim_eval_test = os.path.join(data_dir, "sim-eval-dev.json")
+    sim_eval_test = os.path.join(data_dir, "sim-eval-train.json")
+    # sim_eval_test = os.path.join(data_dir, "sim-eval-dev.json")
+    # sim_eval_test = os.path.join(data_dir, "sim-eval-test.json")
 
     # word embedding
     word_emb_file = os.path.join(data_dir, "word_emb.json")
@@ -43,10 +46,11 @@ class Config:
     # glove_word_file = os.path.join(home, "datasets", "glove.840B.300d.txt")
     glove_word_size = int(2.2e6)
     glove_dim = 300
+    char_dim = 15
 
     # hyper param
-    q_max_length = 15
-    c_sent_max_length = 30
+    q_max_length = 35
+    c_sent_max_length = 55
     batch_size = 64
     test_batch_size = 1
     epoch = 10

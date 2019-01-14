@@ -16,13 +16,18 @@ def word_tokenize(sent):
 
 def sentence_tokenize(context):
     sent_list = list()
-    start_idx = 0
+    minimum_next = 0
     for i, raw_sent in enumerate(sent_tokenize(context)):
+        start_idx = context.find(raw_sent, minimum_next)
+        if raw_sent[0] != context[start_idx]:
+            print(raw_sent)
+            print(start_idx, context)
+            raise IOError
         sent_tokens = word_tokenize(raw_sent)
         end_idx = start_idx + len(raw_sent) - 1
         sent_list.append([(start_idx, end_idx), raw_sent, sent_tokens])
         # add 2 for last space.
-        start_idx = end_idx + 2
+        minimum_next = end_idx + 1
     return sent_list
 
 
@@ -74,7 +79,8 @@ def parse_file(raw_file, word_counter):
 
 def build_sent_sim(config):
     """ parse raw json file and make train file for sentence similarity """
-    obj_file = config.raw_json_dev_file
+    obj_file = config.raw_json_train_file
+    # obj_file = config.raw_json_dev_file
     print("[INFO] parsing %s..." % obj_file)
     data = []
     with open(obj_file, "r") as f:
@@ -166,6 +172,41 @@ def get_word(word2idx_dict, word):
     return 1
 
 
+def char2idx(word, c_max_length):
+    char_idx = list()
+    for c in word:
+        asc_code = ord(c)
+        # None -> 0, 'A' -> 1, 'a' -> 'Z'+ 1
+        if ord('A') <= asc_code <= ord('Z'):
+            char_idx.append(asc_code - ord('A') + 1)
+        elif ord('a') <= asc_code <= ord('z'):
+            char_idx.append(asc_code - 70)
+        else:
+            char_idx.append(0)
+
+    if len(word) < c_max_length:
+        # padding
+        for _ in range(c_max_length - len(word)):
+            char_idx.append(0)
+        return char_idx
+    else:
+        return char_idx[:c_max_length]
+
+
+def char_convert_with_padding(tokens, max_length, c_max_length=7):
+    result = list()
+    for word in tokens:
+        result.append(char2idx(word, c_max_length))
+
+    if len(tokens) < max_length:
+        # padding
+        for _ in range(max_length - len(tokens)):
+            result.append([0] * c_max_length)
+        return result
+    else:
+        return result[:max_length]
+
+
 def convert2idx_with_padding(tokens, w2i_dict, _max_length):
     result = list()
     for _token in tokens:
@@ -186,8 +227,10 @@ def build_features(data, w2i_dict, config):
 
     for d in data:
         d["question_idx"] = convert2idx_with_padding(d["q_tokens"], w2i_dict, q_max_length)
+        d["question_char_idx"] = char_convert_with_padding(d["q_tokens"], q_max_length)
         if "context_sent_tokens" in d:
             d["sentence_idx"] = convert2idx_with_padding(d["context_sent_tokens"], w2i_dict, c_sent_max_length)
+            d["sentence_char_idx"] = char_convert_with_padding(d["context_sent_tokens"], c_sent_max_length)
             for ans in d["answers"]:
                 answer_start = int(ans["answer_start"])
                 answer_end = answer_start + len(ans['text']) - 1
@@ -213,39 +256,46 @@ def build_transfer_data(raw_file, w2i_dict, config):
     with open(raw_file, "r") as f:
         data = json.load(f)
         for d in data:
-            d["question_idx"] = convert2idx_with_padding(d["question"], w2i_dict, q_max_length)
-            d["context_idx"] = convert2idx_with_padding(d["filtered_context"], w2i_dict, c_sent_max_length)
+            question_tokens = word_tokenize(d["question"])
+            context_tokens = word_tokenize(d["filtered_context"])
+            d["question_idx"] = convert2idx_with_padding(question_tokens, w2i_dict, q_max_length)
+            d["context_idx"] = convert2idx_with_padding(context_tokens, w2i_dict, c_sent_max_length)
+            d["question_char_idx"] = char_convert_with_padding(question_tokens, config.q_max_length)
+            d["context_char_idx"] = char_convert_with_padding(context_tokens, config.c_sent_max_length)
 
         return data
 
 
 def prepro(config):
+    """
     word_counter, char_counter = Counter(), Counter()
 
     train_data = parse_file(config.raw_json_train_file, word_counter)
     dev_data = parse_file(config.raw_json_dev_file, word_counter)
     test_data = parse_file(config.raw_json_test_file, word_counter)
 
-    word_emb_mat, word2idx_dict = get_embedding(word_counter, "word", emb_file=config.glove_word_file,
-        size=config.glove_word_size, vec_size=config.glove_dim)
+    f = open(config.word2idx_file, 'r')
+    word2idx_dict = json.load(f)
+    # word_emb_mat, word2idx_dict = get_embedding(word_counter, "word", emb_file=config.glove_word_file,
+    #    size=config.glove_word_size, vec_size=config.glove_dim)
 
     build_features(train_data, word2idx_dict, config)
     build_features(dev_data, word2idx_dict, config)
     build_features(test_data, word2idx_dict, config)
     
-    save(config.word_emb_file, word_emb_mat, message="word embedding")
-    save(config.word2idx_file, word2idx_dict, message="word2idx")
+    # save(config.word_emb_file, word_emb_mat, message="word embedding")
+    # save(config.word2idx_file, word2idx_dict, message="word2idx")
     save(config.train_file, train_data, message="train data")
     save(config.dev_file, dev_data, message="dev data")
     save(config.test_file, test_data, message="test data")
-
+    """
     # sentence sim-eval
-    # f = open(config.word2idx_file, 'r')
-    # word2idx_dict = json.load(f)
+    f = open(config.word2idx_file, 'r')
+    word2idx_dict = json.load(f)
     sim_eval = build_sent_sim(config)
     build_features(sim_eval, word2idx_dict, config)
     save(config.sim_eval_test, sim_eval, message="sentence similarity test file")
-
+    """
     # transfer
     # f = open(config.word2idx_file, 'r')
     # word2idx_dict = json.load(f)
@@ -254,3 +304,4 @@ def prepro(config):
 
     save(config.transfer_train_file, transfer_train, message="transfer train file")
     save(config.transfer_dev_file, transfer_dev, message="transfer dev file")
+    """
